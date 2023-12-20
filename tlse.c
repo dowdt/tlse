@@ -121,7 +121,7 @@
 #define TLS_ERROR(err, statement)   if (err) statement;
 
 #ifdef DEBUG
-#define DEBUG_PRINT(...)            fprintf(stderr, __VA_ARGS__)
+#define DEBUG_PRINT(...)            fprintf(stdout, __VA_ARGS__)
 #define DEBUG_DUMP_HEX(buf, len)    {if (buf) { int _i_; for (_i_ = 0; _i_ < len; _i_++) { DEBUG_PRINT("%02X ", (unsigned int)(buf)[_i_]); } } else { fprintf(stderr, "(null)"); } }
 #define DEBUG_INDEX(fields)         print_index(fields)
 #define DEBUG_DUMP(buf, length)     fwrite(buf, 1, length, stderr);
@@ -1810,7 +1810,7 @@ int _private_tls_verify_rsa(struct TLSContext *context, unsigned int hash_type, 
 #endif
 #ifdef WITH_TLS_13
     if ((context->version == TLS_V13) || (context->version == DTLS_V13))
-        err = rsa_verify_hash_ex(buffer, len, hash, hash_len, LTC_PKCS_1_PSS, hash_idx, 0, &rsa_stat, &key);
+        err = rsa_verify_hash_ex(buffer, len, hash, hash_len, LTC_PKCS_1_PSS, hash_idx, hash_len, &rsa_stat, &key);
     else
 #endif
         err = rsa_verify_hash_ex(buffer, len, hash, hash_len, LTC_PKCS_1_V1_5, hash_idx, 0, &rsa_stat, &key);
@@ -1954,7 +1954,7 @@ int _private_tls_sign_rsa(struct TLSContext *context, unsigned int hash_type, co
         }
 #ifdef WITH_TLS_13
         if ((context->version == TLS_V13) || (context->version == DTLS_V13))
-            err = rsa_sign_hash_ex(hash, hash_len, out, outlen, LTC_PKCS_1_PSS, NULL, find_prng("sprng"), hash_idx, hash_type == sha256 ? 32 : 48, &key);
+            err = rsa_sign_hash_ex(hash, hash_len, out, outlen, LTC_PKCS_1_PSS, NULL, find_prng("sprng"), hash_idx, hash_len, &key);
         else
 #endif
             err = rsa_sign_hash_ex(hash, hash_len, out, outlen, LTC_PKCS_1_V1_5, NULL, find_prng("sprng"), hash_idx, 0, &key);
@@ -6792,7 +6792,7 @@ int tls_parse_certificate(struct TLSContext *context, const unsigned char *buf, 
     }
 #endif
 
-    CHECK_SIZE(size_of_all_certificates, buf_len - res, TLS_NEED_MORE_DATA);
+    CHECK_SIZE(size_of_all_certificates, buf_len - res + 1, TLS_NEED_MORE_DATA);
     int size = size_of_all_certificates;
     
     int idx = 0;
@@ -6853,11 +6853,12 @@ int tls_parse_certificate(struct TLSContext *context, const unsigned char *buf, 
                 if (remaining >= 2) {
                     // ignore extensions
                     remaining -= 2;
-                    unsigned short size = ntohs(*(unsigned short *)&buf[res2]);
-                    if ((size) && (size >= remaining)) {
-                        res2 += size;
-                        remaining -= size;
-                    }
+                    res2 += 2;
+                    /* unsigned short size = ntohs(*(unsigned short *)&buf[res2]); */
+                    /* if ((size) && (size >= remaining)) { */
+                    /*     res2 += size; */
+                    /*     remaining -= size; */
+                    /* } */
                 }
             }
 #endif
@@ -7412,7 +7413,7 @@ int tls_parse_verify_tls13(struct TLSContext *context, const unsigned char *buf,
     // first 64 bytes to 0x20 (32)
     memset(signing_data, 0x20, 64);
     // context string 33 bytes
-    if (context->is_server)
+    if (!context->is_server)
         memcpy(signing_data + 64, "TLS 1.3, server CertificateVerify", 33);
     else
         memcpy(signing_data + 64, "TLS 1.3, client CertificateVerify", 33);
